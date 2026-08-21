@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f6f8fa, #0d1117);
+    --surface: light-dark(#ffffff, #161b22);
+    --border: light-dark(#d1d9e0, #30363d);
+    --text: light-dark(#1f2328, #e6edf3);
+    --text-muted: light-dark(#59636e, #8d96a0);
+    --accent: light-dark(#0969da, #4493f8);
+    --green: light-dark(#1a7f37, #3fb950);
+    --red: light-dark(#cf222e, #f85149);
+    --yellow: light-dark(#9a6700, #d29922);
+    --purple: light-dark(#8250df, #ab7df8);
+    --badge-green-bg: light-dark(#dafbe1, #12261e);
+    --badge-red-bg: light-dark(#ffebe9, #25171c);
+    --badge-yellow-bg: light-dark(#fff8c5, #272115);
+    --badge-purple-bg: light-dark(#fbefff, #211a2e);
+    --badge-gray-bg: light-dark(#eff2f5, #21262d);
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  }
+
+  .wrap {
+    max-width: 60rem;
+    margin-inline: auto;
+    padding: 1.5rem 1rem 4rem;
+  }
+
+  header.page {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-block-end: 1.5rem;
+  }
+
+  header.page h1 {
+    font-size: 1.25rem;
+    margin: 0;
+  }
+
+  #whoami {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  #org-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-inline-end: 0.75rem;
+  }
+
+  /* Token form */
+  #token-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    max-width: 34rem;
+    margin-block: 3rem;
+    margin-inline: auto;
+  }
+  #token-form h2 { margin-block-start: 0; font-size: 1rem; }
+  #token-form p { color: var(--text-muted); font-size: 0.85rem; }
+  #token-form label { display: block; font-weight: 600; margin-block-end: 0.25rem; }
+  #token-form input {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+  }
+  #token-form button, #signout {
+    margin-block-start: 0.75rem;
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--green);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #signout {
+    margin: 0;
+    padding: 0.2rem 0.6rem;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.8rem;
+  }
+  #signout:hover { color: var(--red); border-color: var(--red); }
+
+  /* Sections */
+  section { margin-block-end: 2rem; }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-block-end: 0.5rem;
+  }
+  .section-head h2 {
+    font-size: 1rem;
+    margin: 0;
+  }
+  .count {
+    display: inline-block;
+    min-width: 1.25rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: var(--badge-gray-bg);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  #org-label select {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  ul.pr-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  ul.pr-list:empty { display: none; }
+  ul.pr-list li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.25rem 0.75rem;
+    align-items: start;
+    padding: 0.6rem 1rem;
+  }
+  ul.pr-list li + li { border-block-start: 1px solid var(--border); }
+  ul.pr-list li.hidden { display: none; }
+
+  .pr-icon { padding-block-start: 0.15rem; }
+  .pr-icon svg { fill: var(--green); }
+  li.is-draft .pr-icon svg { fill: var(--text-muted); }
+
+  .pr-main { min-width: 0; }
+  .pr-title {
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .pr-title:hover { color: var(--accent); text-decoration: underline; }
+  .pr-meta {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+  .pr-meta a { color: inherit; text-decoration: none; }
+  .pr-meta a:hover { color: var(--accent); }
+
+  .pr-side {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block-start: 0.15rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge.approved      { color: var(--green);  background: var(--badge-green-bg); }
+  .badge.changes       { color: var(--red);    background: var(--badge-red-bg); }
+  .badge.re-review     { color: var(--purple); background: var(--badge-purple-bg); }
+  .badge.awaiting      { color: var(--yellow); background: var(--badge-yellow-bg); }
+  .badge.draft         { color: var(--text-muted); background: var(--badge-gray-bg); }
+
+  .ci {
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .ci.success { color: var(--green); }
+  .ci.failure { color: var(--red); }
+  .ci.pending { color: var(--yellow); }
+
+  .empty, #status {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 1rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+  }
+  #status.error { color: var(--red); border-color: var(--red); border-style: solid; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>PR Dashboard</h1>
+    <div>
+      <label id="org-label" hidden>Org:
+        <select id="org-filter">
+          <option value="">All</option>
+        </select>
+      </label>
+      <span id="whoami"></span>
+      <button id="signout" type="button" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <form id="token-form" hidden>
+    <h2>GitHub token needed</h2>
+    <p>
+      Create a <a href="https://github.com/settings/tokens/new?scopes=repo,read:org&description=PR%20Dashboard">classic
+      personal access token</a> with <code>repo</code> and <code>read:org</code> scopes.
+      It's stored in this browser's localStorage and only sent to <code>api.github.com</code>.
+    </p>
+    <label for="token-input">Personal access token</label>
+    <input id="token-input" type="password" autocomplete="off" required placeholder="ghp_…">
+    <button type="submit">Save &amp; load</button>
+  </form>
+
+  <p id="status" role="status"></p>
+
+  <main id="dashboard" hidden>
+    <section aria-labelledby="reviewing-h">
+      <div class="section-head">
+        <h2 id="reviewing-h">Review requested <span class="count" id="reviewing-count">0</span></h2>
+      </div>
+      <ul class="pr-list" id="reviewing-list"></ul>
+      <p class="empty" id="reviewing-empty" hidden>No PRs waiting on your review. 🎉</p>
+    </section>
+
+    <section aria-labelledby="authored-h">
+      <div class="section-head">
+        <h2 id="authored-h">Authored <span class="count" id="authored-count">0</span></h2>
+      </div>
+      <ul class="pr-list" id="authored-list"></ul>
+      <p class="empty" id="authored-empty" hidden>No open PRs authored by you.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+const TOKEN_KEY = 'pr-dashboard-token';
+const $ = (sel) => document.querySelector(sel);
+
+const PR_FRAGMENT = `
+  fragment prFields on PullRequest {
+    number title url isDraft updatedAt
+    repository { nameWithOwner owner { login } }
+    reviewDecision
+    reviewRequests(first: 20) {
+      nodes { requestedReviewer { ... on User { login } ... on Team { slug } } }
+    }
+    latestOpinionatedReviews(first: 20) {
+      nodes { state author { login } }
+    }
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+    comments { totalCount }
+  }`;
+
+const QUERY = `
+  query {
+    viewer { login }
+    reviewing: search(query: "is:pr is:open archived:false review-requested:@me sort:updated-desc", type: ISSUE, first: 50) {
+      issueCount
+      nodes { ...prFields }
+    }
+    authored: search(query: "is:pr is:open archived:false author:@me sort:updated-desc", type: ISSUE, first: 50) {
+      issueCount
+      nodes { ...prFields }
+    }
+  }
+  ${PR_FRAGMENT}`;
+
+async function fetchData(token) {
+  const res = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: { Authorization: `bearer ${token}` },
+    body: JSON.stringify({ query: QUERY }),
+  });
+  if (res.status === 401) throw new Error('unauthorized');
+  if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors.map((e) => e.message).join('; '));
+  return json.data;
+}
+
+// Classify an authored PR into a review status.
+// "Re-review requested" = someone requested changes AND that same reviewer is
+// back in reviewRequests (i.e. the author clicked "re-request review").
+function classify(pr) {
+  if (pr.isDraft) return { key: 'draft', label: 'Draft' };
+  const requested = new Set(
+    pr.reviewRequests.nodes
+      .map((n) => n.requestedReviewer?.login)
+      .filter(Boolean)
+  );
+  const blockers = pr.latestOpinionatedReviews.nodes
+    .filter((r) => r.state === 'CHANGES_REQUESTED')
+    .map((r) => r.author?.login)
+    .filter(Boolean);
+
+  if (pr.reviewDecision === 'CHANGES_REQUESTED') {
+    return blockers.some((login) => requested.has(login))
+      ? { key: 're-review', label: 'Re-review requested' }
+      : { key: 'changes', label: 'Changes requested' };
+  }
+  if (pr.reviewDecision === 'APPROVED') return { key: 'approved', label: 'Approved' };
+  return { key: 'awaiting', label: 'Awaiting review' };
+}
+
+const CI_ICONS = {
+  SUCCESS: { cls: 'success', char: '✓', label: 'checks passing' },
+  FAILURE: { cls: 'failure', char: '✕', label: 'checks failing' },
+  ERROR:   { cls: 'failure', char: '✕', label: 'checks errored' },
+  PENDING: { cls: 'pending', char: '●', label: 'checks pending' },
+  EXPECTED:{ cls: 'pending', char: '●', label: 'checks expected' },
+};
+
+function relativeTime(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  const units = [[31536000, 'year'], [2592000, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']];
+  for (const [secs, name] of units) {
+    if (s >= secs) {
+      const n = Math.floor(s / secs);
+      return `${n} ${name}${n > 1 ? 's' : ''} ago`;
+    }
+  }
+  return 'just now';
+}
+
+function renderPr(pr, { badge } = {}) {
+  const li = document.createElement('li');
+  li.dataset.org = pr.repository.owner.login;
+  if (pr.isDraft) li.classList.add('is-draft');
+
+  const icon = document.createElement('span');
+  icon.className = 'pr-icon';
+  icon.innerHTML = '<svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"></path></svg>';
+
+  const main = document.createElement('span');
+  main.className = 'pr-main';
+
+  const title = document.createElement('a');
+  title.className = 'pr-title';
+  title.href = pr.url;
+  title.textContent = pr.title;
+
+  const meta = document.createElement('span');
+  meta.className = 'pr-meta';
+  const comments = pr.comments.totalCount ? ` · 💬 ${pr.comments.totalCount}` : '';
+  meta.innerHTML = `<a href="https://github.com/${pr.repository.nameWithOwner}">${pr.repository.nameWithOwner}</a>`
+    + ` #${pr.number} · updated ${relativeTime(pr.updatedAt)}${comments}`;
+
+  main.append(title, document.createElement('br'), meta);
+
+  const side = document.createElement('span');
+  side.className = 'pr-side';
+
+  const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup?.state;
+  if (rollup && CI_ICONS[rollup]) {
+    const { cls, char, label } = CI_ICONS[rollup];
+    const ci = document.createElement('span');
+    ci.className = `ci ${cls}`;
+    ci.textContent = char;
+    ci.title = label;
+    ci.setAttribute('aria-label', label);
+    side.append(ci);
+  }
+
+  if (badge) {
+    const b = document.createElement('span');
+    b.className = `badge ${badge.key}`;
+    b.textContent = badge.label;
+    side.append(b);
+  }
+
+  li.append(icon, main, side);
+  return li;
+}
+
+function renderReviewing(prs) {
+  const list = $('#reviewing-list');
+  list.replaceChildren(...prs.map((pr) =>
+    renderPr(pr, { badge: pr.isDraft ? { key: 'draft', label: 'Draft' } : null })
+  ));
+}
+
+function buildOrgFilter(...prLists) {
+  const orgs = [...new Set(prLists.flat().map((pr) => pr.repository.owner.login))].sort();
+  const select = $('#org-filter');
+  const requested = new URLSearchParams(location.search).get('org') || select.value;
+  select.replaceChildren(new Option('All', ''), ...orgs.map((o) => new Option(o, o)));
+  if (orgs.includes(requested)) select.value = requested;
+  $('#org-label').hidden = orgs.length < 2;
+  applyOrgFilter();
+}
+
+function syncOrgToUrl(org) {
+  const url = new URL(location);
+  if (org) url.searchParams.set('org', org);
+  else url.searchParams.delete('org');
+  history.replaceState(null, '', url);
+}
+
+function applyOrgFilter() {
+  const org = $('#org-filter').value;
+  syncOrgToUrl(org);
+  for (const name of ['reviewing', 'authored']) {
+    const items = $(`#${name}-list`).querySelectorAll('li');
+    let visible = 0;
+    for (const li of items) {
+      const show = !org || li.dataset.org === org;
+      li.classList.toggle('hidden', !show);
+      if (show) visible++;
+    }
+    $(`#${name}-count`).textContent = org ? `${visible} / ${items.length}` : items.length;
+    $(`#${name}-empty`).hidden = visible > 0;
+  }
+}
+
+function renderAuthored(prs) {
+  const list = $('#authored-list');
+  // Most-actionable first: changes requested → awaiting → re-review pending → approved → draft.
+  const order = { changes: 0, awaiting: 1, 're-review': 2, approved: 3, draft: 4 };
+  const classified = prs.map((pr) => ({ pr, badge: classify(pr) }));
+  classified.sort((a, b) => order[a.badge.key] - order[b.badge.key]);
+  list.replaceChildren(...classified.map(({ pr, badge }) => renderPr(pr, { badge })));
+}
+
+async function load(token) {
+  const status = $('#status');
+  status.classList.remove('error');
+  status.textContent = 'Loading…';
+  try {
+    const data = await fetchData(token);
+    localStorage.setItem(TOKEN_KEY, token);
+    $('#whoami').textContent = `@${data.viewer.login}`;
+    $('#signout').hidden = false;
+    $('#token-form').hidden = true;
+    $('#dashboard').hidden = false;
+    status.textContent = '';
+    renderReviewing(data.reviewing.nodes);
+    renderAuthored(data.authored.nodes);
+    buildOrgFilter(data.reviewing.nodes, data.authored.nodes);
+  } catch (err) {
+    if (err.message === 'unauthorized') {
+      localStorage.removeItem(TOKEN_KEY);
+      $('#token-form').hidden = false;
+      status.textContent = 'Token was rejected — enter a new one.';
+    } else {
+      status.textContent = `Failed to load: ${err.message}`;
+    }
+    status.classList.add('error');
+  }
+}
+
+$('#token-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const token = $('#token-input').value.trim();
+  if (token) load(token);
+});
+
+$('#signout').addEventListener('click', () => {
+  localStorage.removeItem(TOKEN_KEY);
+  location.reload();
+});
+
+$('#org-filter').addEventListener('change', applyOrgFilter);
+
+const saved = localStorage.getItem(TOKEN_KEY);
+if (saved) {
+  load(saved);
+} else {
+  $('#token-form').hidden = false;
+}
+</script>
+</body>
+</html>

@@ -273,6 +273,7 @@
 
 <script>
 const TOKEN_KEY = 'pr-dashboard-token';
+const CACHE_KEY = 'pr-dashboard-cache';
 const $ = (sel) => document.querySelector(sel);
 
 const PR_FRAGMENT = `
@@ -296,31 +297,28 @@ const PR_FRAGMENT = `
     comments { totalCount }
   }`;
 
-const QUERY = `
+// The two searches run as separate parallel requests: each is ~2.5s
+// server-side, so combining them in one query roughly doubles the wait.
+const listQuery = (searchQualifier) => `
   query {
     viewer { login }
-    reviewing: search(query: "is:pr is:open archived:false review-requested:@me sort:updated-desc", type: ISSUE, first: 50) {
-      issueCount
-      nodes { ...prFields }
-    }
-    authored: search(query: "is:pr is:open archived:false author:@me sort:updated-desc", type: ISSUE, first: 50) {
-      issueCount
+    result: search(query: "is:pr is:open archived:false ${searchQualifier} sort:updated-desc", type: ISSUE, first: 50) {
       nodes { ...prFields }
     }
   }
   ${PR_FRAGMENT}`;
 
-async function fetchData(token) {
+async function fetchList(token, searchQualifier) {
   const res = await fetch('https://api.github.com/graphql', {
     method: 'POST',
     headers: { Authorization: `bearer ${token}` },
-    body: JSON.stringify({ query: QUERY }),
+    body: JSON.stringify({ query: listQuery(searchQualifier) }),
   });
   if (res.status === 401) throw new Error('unauthorized');
   if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(json.errors.map((e) => e.message).join('; '));
-  return json.data;
+  return { viewer: json.data.viewer, prs: json.data.result.nodes };
 }
 
 // Classify an authored PR into a review status.
@@ -475,24 +473,60 @@ function renderAuthored(prs) {
   list.replaceChildren(...classified.map(({ pr, badge }) => renderPr(pr, { badge })));
 }
 
+const lists = { reviewing: [], authored: [] };
+
+function showDashboard(viewerLogin) {
+  $('#whoami').textContent = `@${viewerLogin}`;
+  $('#signout').hidden = false;
+  $('#token-form').hidden = true;
+  $('#dashboard').hidden = false;
+}
+
+function renderList(name, prs) {
+  lists[name] = prs;
+  (name === 'reviewing' ? renderReviewing : renderAuthored)(prs);
+  buildOrgFilter(lists.reviewing, lists.authored);
+}
+
 async function load(token) {
   const status = $('#status');
   status.classList.remove('error');
-  status.textContent = 'Loading…';
+
+  // Stale-while-revalidate: paint the last results immediately, refresh behind.
+  const cache = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null');
+  if (cache) {
+    showDashboard(cache.viewer);
+    renderList('reviewing', cache.reviewing);
+    renderList('authored', cache.authored);
+  } else {
+    status.textContent = 'Loading…';
+  }
+
+  const searches = {
+    reviewing: 'review-requested:@me',
+    authored: 'author:@me',
+  };
   try {
-    const data = await fetchData(token);
+    const fresh = {};
+    await Promise.all(Object.entries(searches).map(async ([name, qualifier]) => {
+      const { viewer, prs } = await fetchList(token, qualifier);
+      fresh[name] = prs;
+      fresh.viewer = viewer.login;
+      showDashboard(viewer.login);
+      renderList(name, prs);
+      status.textContent = '';
+    }));
     localStorage.setItem(TOKEN_KEY, token);
-    $('#whoami').textContent = `@${data.viewer.login}`;
-    $('#signout').hidden = false;
-    $('#token-form').hidden = true;
-    $('#dashboard').hidden = false;
-    status.textContent = '';
-    renderReviewing(data.reviewing.nodes);
-    renderAuthored(data.authored.nodes);
-    buildOrgFilter(data.reviewing.nodes, data.authored.nodes);
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      viewer: fresh.viewer,
+      reviewing: fresh.reviewing,
+      authored: fresh.authored,
+    }));
   } catch (err) {
     if (err.message === 'unauthorized') {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(CACHE_KEY);
+      $('#dashboard').hidden = true;
       $('#token-form').hidden = false;
       status.textContent = 'Token was rejected — enter a new one.';
     } else {
@@ -510,6 +544,7 @@ $('#token-form').addEventListener('submit', (e) => {
 
 $('#signout').addEventListener('click', () => {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(CACHE_KEY);
   location.reload();
 });
 

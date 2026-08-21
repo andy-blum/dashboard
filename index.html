@@ -64,6 +64,22 @@
     margin-inline-end: 0.75rem;
   }
 
+  #spinner {
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid var(--border);
+    border-block-start-color: var(--accent);
+    border-radius: 50%;
+    vertical-align: -0.15rem;
+    animation: spin 0.8s linear infinite;
+  }
+  #spinner[hidden] { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #spinner { animation-duration: 2s; }
+  }
+
   /* Token form */
   #token-form {
     background: var(--surface);
@@ -233,6 +249,7 @@
           <option value="">All</option>
         </select>
       </label>
+      <span id="spinner" role="status" aria-label="Refreshing" hidden></span>
       <span id="whoami"></span>
       <button id="signout" type="button" hidden>Sign out</button>
     </div>
@@ -494,9 +511,6 @@ function renderList(name, prs) {
 }
 
 async function load(token) {
-  const status = $('#status');
-  status.classList.remove('error');
-
   // Stale-while-revalidate: paint the last results immediately, refresh behind.
   const cache = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null');
   if (cache) {
@@ -504,8 +518,25 @@ async function load(token) {
     renderList('reviewing', cache.reviewing);
     renderList('authored', cache.authored);
   } else {
-    status.textContent = 'Loading…';
+    $('#status').textContent = 'Loading…';
   }
+
+  await refresh(token);
+  setInterval(() => {
+    if (!document.hidden) refresh(token);
+  }, 60_000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refresh(token);
+  });
+}
+
+let refreshing = false;
+async function refresh(token) {
+  if (refreshing) return;
+  refreshing = true;
+  const status = $('#status');
+  status.classList.remove('error');
+  $('#spinner').hidden = false;
 
   const searches = {
     reviewing: 'review-requested:@me',
@@ -538,6 +569,9 @@ async function load(token) {
       status.textContent = `Failed to load: ${err.message}`;
     }
     status.classList.add('error');
+  } finally {
+    refreshing = false;
+    $('#spinner').hidden = true;
   }
 }
 

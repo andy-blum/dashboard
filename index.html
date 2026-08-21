@@ -286,7 +286,13 @@ const PR_FRAGMENT = `
     latestOpinionatedReviews(first: 20) {
       nodes { state author { login } }
     }
-    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+    commits(last: 1) { nodes { commit { statusCheckRollup {
+      state
+      contexts(first: 100) { nodes {
+        ... on CheckRun { conclusion detailsUrl }
+        ... on StatusContext { state targetUrl }
+      } }
+    } } } }
     comments { totalCount }
   }`;
 
@@ -341,6 +347,14 @@ function classify(pr) {
   return { key: 'awaiting', label: 'Awaiting review' };
 }
 
+// On failure, link straight to the first failed check's log instead of the checks tab.
+const BAD = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED']);
+function firstFailedCheckUrl(rollup) {
+  if (rollup.state !== 'FAILURE' && rollup.state !== 'ERROR') return null;
+  const failed = rollup.contexts.nodes.find((c) => BAD.has(c.conclusion ?? c.state));
+  return failed?.detailsUrl ?? failed?.targetUrl ?? null;
+}
+
 const CI_ICONS = {
   SUCCESS: { cls: 'success', char: '✓', label: 'checks passing' },
   FAILURE: { cls: 'failure', char: '✕', label: 'checks failing' },
@@ -389,15 +403,15 @@ function renderPr(pr, { badge } = {}) {
   const side = document.createElement('span');
   side.className = 'pr-side';
 
-  const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup?.state;
-  if (rollup && CI_ICONS[rollup]) {
-    const { cls, char, label } = CI_ICONS[rollup];
+  const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup;
+  if (rollup && CI_ICONS[rollup.state]) {
+    const { cls, char, label } = CI_ICONS[rollup.state];
     const ci = document.createElement('a');
     ci.className = `ci ${cls}`;
     ci.textContent = char;
     ci.title = label;
     ci.setAttribute('aria-label', label);
-    ci.href = `${pr.url}/checks`;
+    ci.href = firstFailedCheckUrl(rollup) ?? `${pr.url}/checks`;
     side.append(ci);
   }
 

@@ -431,12 +431,18 @@ function renderReviewing(prs) {
   ));
 }
 
+// Org requested via ?org=; held until a render includes it in the options.
+let pendingOrg = new URLSearchParams(location.search).get('org');
+
 function buildOrgFilter(...prLists) {
   const orgs = [...new Set(prLists.flat().map((pr) => pr.repository.owner.login))].sort();
   const select = $('#org-filter');
-  const requested = new URLSearchParams(location.search).get('org') || select.value;
+  const requested = pendingOrg ?? select.value;
   select.replaceChildren(new Option('All', ''), ...orgs.map((o) => new Option(o, o)));
-  if (orgs.includes(requested)) select.value = requested;
+  if (orgs.includes(requested)) {
+    select.value = requested;
+    pendingOrg = null;
+  }
   $('#org-label').hidden = orgs.length < 2;
   applyOrgFilter();
 }
@@ -450,7 +456,6 @@ function syncOrgToUrl(org) {
 
 function applyOrgFilter() {
   const org = $('#org-filter').value;
-  syncOrgToUrl(org);
   for (const name of ['reviewing', 'authored']) {
     const items = $(`#${name}-list`).querySelectorAll('li');
     let visible = 0;
@@ -548,7 +553,11 @@ $('#signout').addEventListener('click', () => {
   location.reload();
 });
 
-$('#org-filter').addEventListener('change', applyOrgFilter);
+$('#org-filter').addEventListener('change', () => {
+  pendingOrg = null;
+  syncOrgToUrl($('#org-filter').value);
+  applyOrgFilter();
+});
 
 const saved = localStorage.getItem(TOKEN_KEY);
 if (saved) {

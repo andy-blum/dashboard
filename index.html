@@ -204,7 +204,9 @@
   .ci {
     font-size: 0.9rem;
     line-height: 1;
+    text-decoration: none;
   }
+  .ci:hover { text-decoration: underline; }
   .ci.success { color: var(--green); }
   .ci.failure { color: var(--red); }
   .ci.pending { color: var(--yellow); }
@@ -390,11 +392,12 @@ function renderPr(pr, { badge } = {}) {
   const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup?.state;
   if (rollup && CI_ICONS[rollup]) {
     const { cls, char, label } = CI_ICONS[rollup];
-    const ci = document.createElement('span');
+    const ci = document.createElement('a');
     ci.className = `ci ${cls}`;
     ci.textContent = char;
     ci.title = label;
     ci.setAttribute('aria-label', label);
+    ci.href = `${pr.url}/checks`;
     side.append(ci);
   }
 

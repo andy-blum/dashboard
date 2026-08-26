@@ -217,6 +217,60 @@
   .badge.awaiting      { color: var(--yellow); background: var(--badge-yellow-bg); }
   .badge.draft         { color: var(--text-muted); background: var(--badge-gray-bg); }
 
+  /* Reviewer avatars */
+  .reviewers {
+    display: flex;
+    align-items: center;
+    padding-inline-end: 0.15rem;
+  }
+  .reviewers > * + * { margin-inline-start: -0.4rem; }
+  .reviewers > * { position: relative; }
+
+  .avatar {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 999px;
+    background: var(--badge-gray-bg);
+    box-shadow: 0 0 0 1.5px var(--ring, var(--border)), 0 0 0 3px var(--surface);
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    display: block;
+  }
+  .avatar.approved  { --ring: var(--green); }
+  .avatar.changes   { --ring: var(--red); }
+  .avatar.commented { --ring: var(--accent); }
+  .avatar.pending   { --ring: var(--border); opacity: 0.6; }
+  .avatar.is-team, .avatar.is-team img { border-radius: var(--radius); }
+
+  /* Corner glyph so approved/changes don't read by color alone. */
+  .avatar .glyph {
+    position: absolute;
+    inset-block-end: -0.15rem;
+    inset-inline-end: -0.2rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.5rem;
+    line-height: 1;
+    color: #fff;
+    background: var(--ring);
+    box-shadow: 0 0 0 1.5px var(--surface);
+  }
+
   .ci {
     font-size: 0.9rem;
     line-height: 1;
@@ -299,7 +353,13 @@ const PR_FRAGMENT = `
     repository { nameWithOwner owner { login } }
     reviewDecision
     reviewRequests(first: 20) {
-      nodes { requestedReviewer { ... on User { login } ... on Team { slug } } }
+      nodes { requestedReviewer {
+        ... on User { login avatarUrl(size: 48) }
+        ... on Team { slug avatarUrl(size: 48) }
+      } }
+    }
+    latestReviews(first: 20) {
+      nodes { state author { login avatarUrl(size: 48) } }
     }
     latestOpinionatedReviews(first: 20) {
       nodes { state author { login } }
@@ -362,6 +422,99 @@ function classify(pr) {
   return { key: 'awaiting', label: 'Awaiting review' };
 }
 
+const REVIEWED = {
+  APPROVED:          { key: 'approved',  glyph: '\u2713', label: 'approved' },
+  CHANGES_REQUESTED: { key: 'changes',   glyph: '\u2715', label: 'requested changes' },
+  COMMENTED:         { key: 'commented', glyph: '',        label: 'commented' },
+};
+const PENDING_REVIEW = { key: 'pending', glyph: '', label: 'review pending' };
+const REVIEW_ORDER = ['approved', 'changes', 'commented', 'pending'];
+
+// One entry per reviewer: their latest submitted review, or pending if they're
+// still on the request list. Requests win — re-requesting dismisses the old
+// review, so the person really is pending again.
+function reviewers(pr) {
+  const org = pr.repository.owner.login;
+  const byName = new Map();
+
+  for (const r of pr.latestReviews?.nodes ?? []) {
+    const name = r.author?.login;
+    if (!name || !REVIEWED[r.state]) continue;
+    byName.set(name, {
+      name,
+      avatarUrl: r.author.avatarUrl,
+      href: `https://github.com/${name}`,
+      ...REVIEWED[r.state],
+    });
+  }
+
+  for (const n of pr.reviewRequests?.nodes ?? []) {
+    const who = n.requestedReviewer;
+    const name = who?.login ?? who?.slug;
+    if (!name) continue;
+    const team = !who.login;
+    byName.set(name, {
+      name: team ? `${org}/${name}` : name,
+      avatarUrl: who.avatarUrl,
+      href: team ? `https://github.com/orgs/${org}/teams/${name}` : `https://github.com/${name}`,
+      team,
+      ...PENDING_REVIEW,
+    });
+  }
+
+  return [...byName.values()]
+    .sort((a, b) => REVIEW_ORDER.indexOf(a.key) - REVIEW_ORDER.indexOf(b.key));
+}
+
+const MAX_AVATARS = 4;
+
+function renderReviewers(list) {
+  if (!list.length) return null;
+
+  const wrap = document.createElement('span');
+  wrap.className = 'reviewers';
+  const counts = new Map();
+  for (const r of list) counts.set(r.label, (counts.get(r.label) ?? 0) + 1);
+  wrap.setAttribute('aria-label',
+    'Reviews: ' + [...counts].map(([label, n]) => `${n} ${label}`).join(', '));
+
+  const shown = list.slice(0, MAX_AVATARS);
+  shown.forEach((r, i) => {
+    const a = document.createElement('a');
+    a.className = `avatar ${r.key}${r.team ? ' is-team' : ''}`;
+    // Earlier avatars paint on top so their status glyph isn't covered.
+    a.style.zIndex = shown.length - i;
+    a.href = r.href;
+    a.title = `${r.name} — ${r.label}`;
+    if (r.avatarUrl) {
+      const img = document.createElement('img');
+      img.src = r.avatarUrl;
+      img.alt = '';
+      img.loading = 'lazy';
+      a.append(img);
+    } else {
+      a.textContent = r.name.slice(0, 2).toUpperCase();
+    }
+    if (r.glyph) {
+      const g = document.createElement('span');
+      g.className = 'glyph';
+      g.textContent = r.glyph;
+      a.append(g);
+    }
+    wrap.append(a);
+  });
+
+  if (list.length > MAX_AVATARS) {
+    const more = document.createElement('span');
+    more.className = 'avatar';
+    more.textContent = `+${list.length - MAX_AVATARS}`;
+    more.title = list.slice(MAX_AVATARS).map((r) => `${r.name} — ${r.label}`).join('\n');
+    wrap.append(more);
+  }
+
+  return wrap;
+}
+
 // On failure, link straight to the first failed check's log instead of the checks tab.
 const BAD = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED']);
 function firstFailedCheckUrl(rollup) {
@@ -417,6 +570,9 @@ function renderPr(pr, { badge } = {}) {
 
   const side = document.createElement('span');
   side.className = 'pr-side';
+
+  const stack = renderReviewers(reviewers(pr));
+  if (stack) side.append(stack);
 
   const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup;
   if (rollup && CI_ICONS[rollup.state]) {

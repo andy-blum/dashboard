@@ -181,6 +181,9 @@
   .pr-icon { padding-block-start: 0.15rem; }
   .pr-icon svg { fill: var(--green); }
   li.is-draft .pr-icon svg { fill: var(--text-muted); }
+  /* Draft grey wins: a draft isn't waiting on anyone, conflicts or not. */
+  li:not(.is-draft) .pr-icon.conflict svg { fill: var(--red); }
+  li:not(.is-draft) .pr-icon.behind svg { fill: var(--yellow); }
 
   .pr-main { min-width: 0; }
   .pr-title {
@@ -353,6 +356,7 @@ const PR_FRAGMENT = `
     number title url isDraft updatedAt
     repository { nameWithOwner owner { login } }
     reviewDecision
+    mergeable mergeStateStatus baseRefName
     reviewRequests(first: 20) {
       nodes { requestedReviewer {
         ... on User { login avatarUrl(size: 48) }
@@ -421,6 +425,20 @@ function classify(pr) {
   }
   if (pr.reviewDecision === 'APPROVED') return { key: 'approved', label: 'Approved' };
   return { key: 'awaiting', label: 'Awaiting review' };
+}
+
+// Merge state. GitHub computes `mergeable` lazily, so a just-pushed PR can come
+// back UNKNOWN; the next poll picks it up. BEHIND only appears when the base
+// branch requires status checks to be up to date — without that rule a stale
+// branch still reads CLEAN, so "out of date" can't be detected everywhere.
+function mergeWarning(pr) {
+  if (pr.mergeable === 'CONFLICTING') {
+    return { key: 'conflict', title: `Conflicts with ${pr.baseRefName}` };
+  }
+  if (pr.mergeStateStatus === 'BEHIND') {
+    return { key: 'behind', title: `Out of date with ${pr.baseRefName}` };
+  }
+  return null;
 }
 
 const REVIEWED = {
@@ -551,6 +569,14 @@ function renderPr(pr, { badge } = {}) {
 
   const icon = document.createElement('span');
   icon.className = 'pr-icon';
+  // Merge state rides on the icon colour, so name it for anyone not seeing that.
+  const merge = mergeWarning(pr);
+  if (merge) {
+    icon.classList.add(merge.key);
+    icon.title = merge.title;
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', merge.title);
+  }
   icon.innerHTML = '<svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"></path></svg>';
 
   const main = document.createElement('span');
@@ -643,12 +669,25 @@ function applyOrgFilter() {
   }
 }
 
+// Most-actionable first. A branch the author has to fix by hand outranks review
+// state: conflicts → out of date → clean, then changes requested → awaiting →
+// re-review pending → approved. Drafts stay last however broken they are.
+const REVIEW_RANK = { changes: 0, awaiting: 1, 're-review': 2, approved: 3, draft: 4 };
+const MERGE_RANK = { conflict: 0, behind: 1 };
+
+function actionRank({ pr, badge }) {
+  if (badge.key === 'draft') return [2, REVIEW_RANK.draft];
+  return [MERGE_RANK[mergeWarning(pr)?.key] ?? 2, REVIEW_RANK[badge.key]];
+}
+
 function renderAuthored(prs) {
   const list = $('#authored-list');
-  // Most-actionable first: changes requested → awaiting → re-review pending → approved → draft.
-  const order = { changes: 0, awaiting: 1, 're-review': 2, approved: 3, draft: 4 };
   const classified = prs.map((pr) => ({ pr, badge: classify(pr) }));
-  classified.sort((a, b) => order[a.badge.key] - order[b.badge.key]);
+  classified.sort((a, b) => {
+    const [am, ar] = actionRank(a);
+    const [bm, br] = actionRank(b);
+    return am - bm || ar - br;
+  });
   list.replaceChildren(...classified.map(({ pr, badge }) => renderPr(pr, { badge })));
 }
 

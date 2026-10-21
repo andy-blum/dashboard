@@ -94,6 +94,7 @@
   #token-form h2 { margin-block-start: 0; font-size: 1rem; }
   #token-form p { color: var(--text-muted); font-size: 0.85rem; }
   #token-form label { display: block; font-weight: 600; margin-block-end: 0.25rem; }
+  #token-form label + input { margin-block-end: 0.75rem; }
   #token-form input {
     width: 100%;
     padding: 0.4rem 0.6rem;
@@ -103,7 +104,7 @@
     color: var(--text);
     font-family: monospace;
   }
-  #token-form button, #signout {
+  #token-form button, #signout, #add-token {
     margin-block-start: 0.75rem;
     padding: 0.4rem 1rem;
     border: 1px solid var(--border);
@@ -113,7 +114,7 @@
     font-weight: 600;
     cursor: pointer;
   }
-  #signout {
+  #signout, #add-token, #token-form #token-cancel {
     margin: 0;
     padding: 0.2rem 0.6rem;
     background: transparent;
@@ -121,7 +122,36 @@
     font-weight: 400;
     font-size: 0.8rem;
   }
-  #signout:hover { color: var(--red); border-color: var(--red); }
+  #token-form #token-cancel { margin-block-start: 0.75rem; padding: 0.4rem 1rem; }
+  #signout:hover, #token-form #token-cancel:hover { color: var(--red); border-color: var(--red); }
+  #add-token:hover { color: var(--green); border-color: var(--green); }
+
+  #token-list {
+    list-style: none;
+    padding: 0;
+    margin-block: 0 1rem;
+    display: grid;
+    gap: 0.25rem;
+  }
+  #token-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  #token-list button {
+    margin: 0;
+    padding: 0.1rem 0.5rem;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+  #token-list button:hover { color: var(--red); border-color: var(--red); }
 
   /* Sections */
   section { margin-block-end: 2rem; }
@@ -309,20 +339,35 @@
       </label>
       <span id="spinner" role="status" aria-label="Refreshing" hidden></span>
       <span id="whoami"></span>
+      <button id="add-token" type="button" hidden>Add token</button>
       <button id="signout" type="button" hidden>Sign out</button>
     </div>
   </header>
 
   <form id="token-form" hidden>
-    <h2>GitHub token needed</h2>
+    <h2 id="token-form-h">GitHub token needed</h2>
     <p>
-      Create a <a href="https://github.com/settings/tokens/new?scopes=repo,read:org&description=PR%20Dashboard">classic
-      personal access token</a> with <code>repo</code> and <code>read:org</code> scopes.
-      It's stored in this browser's localStorage and only sent to <code>api.github.com</code>.
+      Create a <a href="https://github.com/settings/personal-access-tokens/new">fine-grained
+      personal access token</a> with read-only access to <code>Metadata</code>,
+      <code>Pull requests</code>, <code>Contents</code>, <code>Commit statuses</code> and
+      <code>Checks</code>. Tokens are kept in this browser's localStorage and only ever sent to
+      the GraphQL API of the host they belong to.
     </p>
+    <p>
+      A fine-grained token reaches one user or org, so add one token per org you want here. If an
+      org requires approval for fine-grained tokens, its PRs stay missing until an admin approves.
+      For GitHub Enterprise, enter the host (for example <code>acme.ghe.com</code>) and create the
+      token at <code>https://&lt;host&gt;/settings/personal-access-tokens/new</code>.
+    </p>
+    <ul id="token-list" hidden></ul>
+    <label for="host-input">GitHub host</label>
+    <input id="host-input" type="text" autocomplete="off" required value="github.com"
+      placeholder="github.com" list="host-options">
+    <datalist id="host-options"><option value="github.com"></option></datalist>
     <label for="token-input">Personal access token</label>
-    <input id="token-input" type="password" autocomplete="off" required placeholder="ghp_…">
+    <input id="token-input" type="password" autocomplete="off" required placeholder="github_pat_…">
     <button type="submit">Save &amp; load</button>
+    <button type="button" id="token-cancel" hidden>Cancel</button>
   </form>
 
   <p id="status" role="status"></p>
@@ -347,7 +392,8 @@
 </div>
 
 <script>
-const TOKEN_KEY = 'pr-dashboard-token';
+const TOKENS_KEY = 'pr-dashboard-tokens';
+const LEGACY_TOKEN_KEY = 'pr-dashboard-token';
 const CACHE_KEY = 'pr-dashboard-cache';
 const $ = (sel) => document.querySelector(sel);
 
@@ -390,8 +436,21 @@ const listQuery = (searchQualifier) => `
   }
   ${PR_FRAGMENT}`;
 
-async function fetchList(token, searchQualifier) {
-  const res = await fetch('https://api.github.com/graphql', {
+// github.com and GHE.com (data residency) front the API on an api. subdomain;
+// self-hosted GHES serves it under /api on the same host.
+function apiUrl(host) {
+  if (host === 'github.com' || host.endsWith('.ghe.com')) return `https://api.${host}/graphql`;
+  return `https://${host}/api/graphql`;
+}
+
+function normalizeHost(value) {
+  let host = value.trim().toLowerCase();
+  host = host.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  return host.replace(/^(api|www)\./, '') || 'github.com';
+}
+
+async function fetchList({ host, token }, searchQualifier) {
+  const res = await fetch(apiUrl(host), {
     method: 'POST',
     headers: { Authorization: `bearer ${token}` },
     body: JSON.stringify({ query: listQuery(searchQualifier) }),
@@ -454,6 +513,7 @@ const REVIEW_ORDER = ['approved', 'changes', 'commented', 'pending'];
 // review, so the person really is pending again.
 function reviewers(pr) {
   const org = pr.repository.owner.login;
+  const origin = new URL(pr.url).origin;
   const byName = new Map();
 
   for (const r of pr.latestReviews?.nodes ?? []) {
@@ -462,7 +522,7 @@ function reviewers(pr) {
     byName.set(name, {
       name,
       avatarUrl: r.author.avatarUrl,
-      href: `https://github.com/${name}`,
+      href: `${origin}/${name}`,
       ...REVIEWED[r.state],
     });
   }
@@ -475,7 +535,7 @@ function reviewers(pr) {
     byName.set(name, {
       name: team ? `${org}/${name}` : name,
       avatarUrl: who.avatarUrl,
-      href: team ? `https://github.com/orgs/${org}/teams/${name}` : `https://github.com/${name}`,
+      href: team ? `${origin}/orgs/${org}/teams/${name}` : `${origin}/${name}`,
       team,
       ...PENDING_REVIEW,
     });
@@ -564,7 +624,7 @@ function relativeTime(iso) {
 
 function renderPr(pr, { badge } = {}) {
   const li = document.createElement('li');
-  li.dataset.org = pr.repository.owner.login;
+  li.dataset.org = orgKey(pr);
   if (pr.isDraft) li.classList.add('is-draft');
 
   const icon = document.createElement('span');
@@ -590,7 +650,7 @@ function renderPr(pr, { badge } = {}) {
   const meta = document.createElement('span');
   meta.className = 'pr-meta';
   const comments = pr.comments.totalCount ? ` · 💬 ${pr.comments.totalCount}` : '';
-  meta.innerHTML = `<a href="https://github.com/${pr.repository.nameWithOwner}">${pr.repository.nameWithOwner}</a>`
+  meta.innerHTML = `<a href="${new URL(pr.url).origin}/${pr.repository.nameWithOwner}">${pr.repository.nameWithOwner}</a>`
     + ` #${pr.number} · updated ${relativeTime(pr.updatedAt)}${comments}`;
 
   main.append(title, document.createElement('br'), meta);
@@ -634,8 +694,15 @@ function renderReviewing(prs) {
 // Org requested via ?org=; held until a render includes it in the options.
 let pendingOrg = new URLSearchParams(location.search).get('org');
 
+// Org names can repeat across hosts, so enterprise orgs are keyed host/org.
+function orgKey(pr) {
+  const { host } = new URL(pr.url);
+  const org = pr.repository.owner.login;
+  return host === 'github.com' ? org : `${host}/${org}`;
+}
+
 function buildOrgFilter(...prLists) {
-  const orgs = [...new Set(prLists.flat().map((pr) => pr.repository.owner.login))].sort();
+  const orgs = [...new Set(prLists.flat().map(orgKey))].sort();
   const select = $('#org-filter');
   const requested = pendingOrg ?? select.value;
   select.replaceChildren(new Option('All', ''), ...orgs.map((o) => new Option(o, o)));
@@ -696,7 +763,8 @@ const lists = { reviewing: [], authored: [] };
 function showDashboard(viewerLogin) {
   $('#whoami').textContent = `@${viewerLogin}`;
   $('#signout').hidden = false;
-  $('#token-form').hidden = true;
+  $('#add-token').hidden = false;
+  if (!addingToken) $('#token-form').hidden = true;
   $('#dashboard').hidden = false;
 }
 
@@ -706,7 +774,72 @@ function renderList(name, prs) {
   buildOrgFilter(lists.reviewing, lists.authored);
 }
 
-async function load(token) {
+// A fine-grained PAT only reaches one user or org on one host, so the dashboard
+// holds a list of { host, token } and shows the union of what they can see.
+function readTokens() {
+  const stored = JSON.parse(localStorage.getItem(TOKENS_KEY) ?? 'null');
+  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
+  const raw = Array.isArray(stored) ? stored : legacy ? [legacy] : [];
+  // Earlier versions stored bare github.com token strings.
+  return raw.map((t) => (typeof t === 'string' ? { host: 'github.com', token: t } : t));
+}
+
+let tokens = readTokens();
+
+function saveTokens() {
+  localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+}
+
+// Fold a pre-multi-host install into the new shape on first load.
+if (tokens.length) saveTokens();
+
+const sameEntry = (a, b) => a.host === b.host && a.token === b.token;
+
+function renderTokenList() {
+  const list = $('#token-list');
+  list.hidden = tokens.length === 0;
+  const hosts = [...new Set(tokens.map((t) => t.host))];
+  $('#host-options').replaceChildren(...hosts.map((h) => new Option(h)));
+  list.replaceChildren(...tokens.map((entry) => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.textContent = `${entry.host} …${entry.token.slice(-6)}`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => dropTokens([entry]));
+    li.append(name, remove);
+    return li;
+  }));
+}
+
+function dropTokens(gone) {
+  tokens = tokens.filter((t) => !gone.some((g) => sameEntry(g, t)));
+  saveTokens();
+  renderTokenList();
+  if (tokens.length) refresh();
+  else showTokenForm('All tokens removed — enter a new one.');
+}
+
+// True while the form is open by choice over a working dashboard, so a refresh
+// landing mid-typing doesn't close it.
+let addingToken = false;
+
+function showTokenForm(message) {
+  localStorage.removeItem(CACHE_KEY);
+  $('#dashboard').hidden = true;
+  $('#add-token').hidden = true;
+  $('#signout').hidden = true;
+  $('#token-form').hidden = false;
+  $('#token-cancel').hidden = true;
+  addingToken = false;
+  $('#token-form-h').textContent = 'GitHub token needed';
+  $('#status').textContent = message ?? '';
+  $('#status').classList.toggle('error', Boolean(message));
+}
+
+async function load() {
   // Stale-while-revalidate: paint the last results immediately, refresh behind.
   const cache = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null');
   if (cache) {
@@ -717,18 +850,18 @@ async function load(token) {
     $('#status').textContent = 'Loading…';
   }
 
-  await refresh(token);
+  await refresh();
   setInterval(() => {
-    if (!document.hidden) refresh(token);
+    if (!document.hidden) refresh();
   }, 60_000);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refresh(token);
+    if (!document.hidden) refresh();
   });
 }
 
 let refreshing = false;
-async function refresh(token) {
-  if (refreshing) return;
+async function refresh() {
+  if (refreshing || !tokens.length) return;
   refreshing = true;
   const status = $('#status');
   status.classList.remove('error');
@@ -738,32 +871,59 @@ async function refresh(token) {
     reviewing: 'review-requested:@me',
     authored: 'author:@me',
   };
+  const rejected = new Set();
+  const failures = new Set();
+
   try {
     const fresh = {};
     await Promise.all(Object.entries(searches).map(async ([name, qualifier]) => {
-      const { viewer, prs } = await fetchList(token, qualifier);
+      // One request per token. A single bad token shouldn't blank the dashboard,
+      // so failures are collected and the rest still render.
+      const settled = await Promise.all(tokens.map((entry) =>
+        fetchList(entry, qualifier).catch((err) => {
+          if (err.message === 'unauthorized') rejected.add(entry);
+          else failures.add(`${entry.host}: ${err.message}`);
+          return null;
+        })
+      ));
+      const ok = settled.filter(Boolean);
+      if (!ok.length) return;
+      // Orgs can overlap between tokens, and merging loses the per-search
+      // sort:updated-desc ordering that renderReviewing relies on.
+      const byUrl = new Map(ok.flatMap((r) => r.prs).map((pr) => [pr.url, pr]));
+      const prs = [...byUrl.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       fresh[name] = prs;
-      fresh.viewer = viewer.login;
-      showDashboard(viewer.login);
+      fresh.viewer = ok[0].viewer.login;
+      showDashboard(fresh.viewer);
       renderList(name, prs);
-      status.textContent = '';
     }));
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      viewer: fresh.viewer,
-      reviewing: fresh.reviewing,
-      authored: fresh.authored,
-    }));
-  } catch (err) {
-    if (err.message === 'unauthorized') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(CACHE_KEY);
-      $('#dashboard').hidden = true;
-      $('#token-form').hidden = false;
-      status.textContent = 'Token was rejected — enter a new one.';
-    } else {
-      status.textContent = `Failed to load: ${err.message}`;
+
+    if (rejected.size) {
+      tokens = tokens.filter((t) => !rejected.has(t));
+      saveTokens();
+      renderTokenList();
     }
+    if (!tokens.length) {
+      showTokenForm('Token was rejected — enter a new one.');
+      return;
+    }
+
+    if (fresh.reviewing && fresh.authored) {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        viewer: fresh.viewer,
+        reviewing: fresh.reviewing,
+        authored: fresh.authored,
+      }));
+    }
+
+    const problems = [...failures];
+    if (rejected.size) {
+      problems.unshift(`${rejected.size} token${rejected.size === 1 ? '' : 's'} rejected and removed`);
+    }
+    status.textContent = problems.join('; ');
+    status.classList.toggle('error', problems.length > 0);
+  } catch (err) {
+    status.textContent = `Failed to load: ${err.message}`;
     status.classList.add('error');
   } finally {
     refreshing = false;
@@ -773,12 +933,43 @@ async function refresh(token) {
 
 $('#token-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const token = $('#token-input').value.trim();
-  if (token) load(token);
+  const entry = { host: normalizeHost($('#host-input').value), token: $('#token-input').value.trim() };
+  if (!entry.token || tokens.some((t) => sameEntry(t, entry))) {
+    $('#token-input').value = '';
+    return;
+  }
+  tokens.push(entry);
+  saveTokens();
+  renderTokenList();
+  $('#token-input').value = '';
+  if (started) {
+    addingToken = false;
+    $('#token-form').hidden = true;
+    $('#token-cancel').hidden = true;
+    refresh();
+  } else {
+    started = true;
+    load();
+  }
+});
+
+$('#add-token').addEventListener('click', () => {
+  addingToken = true;
+  $('#token-form-h').textContent = 'Add another token';
+  $('#token-form').hidden = false;
+  $('#token-cancel').hidden = false;
+  $('#token-input').focus();
+});
+
+$('#token-cancel').addEventListener('click', () => {
+  addingToken = false;
+  $('#token-form').hidden = true;
+  $('#token-input').value = '';
 });
 
 $('#signout').addEventListener('click', () => {
-  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKENS_KEY);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem(CACHE_KEY);
   location.reload();
 });
@@ -789,9 +980,11 @@ $('#org-filter').addEventListener('change', () => {
   applyOrgFilter();
 });
 
-const saved = localStorage.getItem(TOKEN_KEY);
-if (saved) {
-  load(saved);
+let started = false;
+renderTokenList();
+if (tokens.length) {
+  started = true;
+  load();
 } else {
   $('#token-form').hidden = false;
 }

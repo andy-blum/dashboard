@@ -458,8 +458,12 @@ async function fetchList({ host, token }, searchQualifier) {
   if (res.status === 401) throw new Error('unauthorized');
   if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
   const json = await res.json();
-  if (json.errors) throw new Error(json.errors.map((e) => e.message).join('; '));
-  return { viewer: json.data.viewer, prs: json.data.result.nodes };
+  // GraphQL answers partially: a field the token can't read comes back null
+  // with an entry in errors, alongside the rest of the data. Only a response
+  // with no result at all is fatal; the rest render with a warning.
+  const warnings = [...new Set((json.errors ?? []).map((e) => e.message))];
+  if (!json.data?.result) throw new Error(warnings.join('; ') || 'empty response');
+  return { viewer: json.data.viewer, prs: json.data.result.nodes.filter(Boolean), warnings };
 }
 
 // Classify an authored PR into a review status.
@@ -873,6 +877,7 @@ async function refresh() {
   };
   const rejected = new Set();
   const failures = new Set();
+  const warnings = new Set();
 
   try {
     const fresh = {};
@@ -886,6 +891,7 @@ async function refresh() {
           return null;
         })
       ));
+      settled.forEach((r, i) => r?.warnings.forEach((w) => warnings.add(`${tokens[i].host}: ${w}`)));
       const ok = settled.filter(Boolean);
       if (!ok.length) return;
       // Orgs can overlap between tokens, and merging loses the per-search
@@ -920,7 +926,7 @@ async function refresh() {
     if (rejected.size) {
       problems.unshift(`${rejected.size} token${rejected.size === 1 ? '' : 's'} rejected and removed`);
     }
-    status.textContent = problems.join('; ');
+    status.textContent = [...problems, ...warnings].join('; ');
     status.classList.toggle('error', problems.length > 0);
   } catch (err) {
     status.textContent = `Failed to load: ${err.message}`;

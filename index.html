@@ -349,9 +349,10 @@
     <p>
       Create a <a href="https://github.com/settings/personal-access-tokens/new">fine-grained
       personal access token</a> with read-only access to <code>Metadata</code>,
-      <code>Pull requests</code>, <code>Contents</code>, <code>Commit statuses</code> and
-      <code>Checks</code>. Tokens are kept in this browser's localStorage and only ever sent to
-      the GraphQL API of the host they belong to.
+      <code>Pull requests</code>, <code>Contents</code> and <code>Commit statuses</code>.
+      Fine-grained tokens can't read individual Actions check runs (the overall CI state still
+      shows); a classic token with <code>repo</code> scope can. Tokens are kept in this browser's
+      localStorage and only ever sent to the GraphQL API of the host they belong to.
     </p>
     <p>
       A fine-grained token reaches one user or org, so add one token per org you want here. If an
@@ -399,7 +400,7 @@ const $ = (sel) => document.querySelector(sel);
 
 const PR_FRAGMENT = `
   fragment prFields on PullRequest {
-    number title url isDraft updatedAt
+    number title url isDraft updatedAt headRefOid
     repository { nameWithOwner owner { login } }
     reviewDecision
     mergeable mergeStateStatus baseRefName
@@ -415,13 +416,7 @@ const PR_FRAGMENT = `
     latestOpinionatedReviews(first: 20) {
       nodes { state author { login } }
     }
-    commits(last: 1) { nodes { commit { statusCheckRollup {
-      state
-      contexts(first: 100) { nodes {
-        ... on CheckRun { conclusion detailsUrl }
-        ... on StatusContext { state targetUrl }
-      } }
-    } } } }
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
     comments { totalCount }
   }`;
 
@@ -443,6 +438,11 @@ function apiUrl(host) {
   return `https://${host}/api/graphql`;
 }
 
+function restUrl(host, path) {
+  if (host === 'github.com' || host.endsWith('.ghe.com')) return `https://api.${host}/${path}`;
+  return `https://${host}/api/v3/${path}`;
+}
+
 function normalizeHost(value) {
   let host = value.trim().toLowerCase();
   host = host.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -461,9 +461,44 @@ async function fetchList({ host, token }, searchQualifier) {
   // GraphQL answers partially: a field the token can't read comes back null
   // with an entry in errors, alongside the rest of the data. Only a response
   // with no result at all is fatal; the rest render with a warning.
-  const warnings = [...new Set((json.errors ?? []).map((e) => e.message))];
+  // statusCheckRollup is forbidden to a fine-grained PAT when a PR's only
+  // checks are Actions runs (the Checks permission can't be granted to PATs).
+  // Those PRs get their CI state from the Actions API below instead.
+  const expected = (e) => e.type === 'FORBIDDEN' && e.path?.at(-1) === 'statusCheckRollup';
+  const warnings = [...new Set((json.errors ?? []).filter((e) => !expected(e)).map((e) => e.message))];
   if (!json.data?.result) throw new Error(warnings.join('; ') || 'empty response');
-  return { viewer: json.data.viewer, prs: json.data.result.nodes.filter(Boolean), warnings };
+  if (warnings.length) console.warn(`${host}: partial response`, json.errors);
+  const prs = json.data.result.nodes.filter(Boolean);
+  await Promise.all(prs.map(async (pr) => { pr.ci = await ciState({ host, token }, pr); }));
+  return { viewer: json.data.viewer, prs, warnings };
+}
+
+const RUN_FAILED = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
+
+// { state, url } for the CI icon: the rollup when the token can read it, else
+// the latest Actions run per workflow for the head commit.
+async function ciState({ host, token }, pr) {
+  const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
+  if (rollup?.state) return { state: rollup.state, url: `${pr.url}/checks` };
+  if (!pr.headRefOid) return null;
+  let runs;
+  try {
+    const path = `repos/${pr.repository.nameWithOwner}/actions/runs?head_sha=${pr.headRefOid}&per_page=100`;
+    const res = await fetch(restUrl(host, path), { headers: { Authorization: `bearer ${token}` } });
+    if (!res.ok) return null;
+    runs = (await res.json()).workflow_runs ?? [];
+  } catch {
+    return null;
+  }
+  // Newest first; keep one run per workflow so a re-run supersedes its failure.
+  const latest = new Map();
+  for (const run of runs) if (!latest.has(run.workflow_id)) latest.set(run.workflow_id, run);
+  const live = [...latest.values()].filter((r) => r.conclusion !== 'cancelled' && r.conclusion !== 'skipped');
+  if (!live.length) return null;
+  const failed = live.find((r) => RUN_FAILED.has(r.conclusion));
+  if (failed) return { state: 'FAILURE', url: failed.html_url };
+  if (live.some((r) => r.status !== 'completed')) return { state: 'PENDING', url: `${pr.url}/checks` };
+  return { state: 'SUCCESS', url: `${pr.url}/checks` };
 }
 
 // Classify an authored PR into a review status.
@@ -472,12 +507,12 @@ async function fetchList({ host, token }, searchQualifier) {
 function classify(pr) {
   if (pr.isDraft) return { key: 'draft', label: 'Draft' };
   const requested = new Set(
-    pr.reviewRequests.nodes
-      .map((n) => n.requestedReviewer?.login)
+    (pr.reviewRequests?.nodes ?? [])
+      .map((n) => n?.requestedReviewer?.login)
       .filter(Boolean)
   );
-  const blockers = pr.latestOpinionatedReviews.nodes
-    .filter((r) => r.state === 'CHANGES_REQUESTED')
+  const blockers = (pr.latestOpinionatedReviews?.nodes ?? [])
+    .filter((r) => r?.state === 'CHANGES_REQUESTED')
     .map((r) => r.author?.login)
     .filter(Boolean);
 
@@ -521,7 +556,7 @@ function reviewers(pr) {
   const byName = new Map();
 
   for (const r of pr.latestReviews?.nodes ?? []) {
-    const name = r.author?.login;
+    const name = r?.author?.login;
     if (!name || !REVIEWED[r.state]) continue;
     byName.set(name, {
       name,
@@ -532,7 +567,7 @@ function reviewers(pr) {
   }
 
   for (const n of pr.reviewRequests?.nodes ?? []) {
-    const who = n.requestedReviewer;
+    const who = n?.requestedReviewer;
     const name = who?.login ?? who?.slug;
     if (!name) continue;
     const team = !who.login;
@@ -598,14 +633,6 @@ function renderReviewers(list) {
   return wrap;
 }
 
-// On failure, link straight to the first failed check's log instead of the checks tab.
-const BAD = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED']);
-function firstFailedCheckUrl(rollup) {
-  if (rollup.state !== 'FAILURE' && rollup.state !== 'ERROR') return null;
-  const failed = rollup.contexts.nodes.find((c) => BAD.has(c.conclusion ?? c.state));
-  return failed?.detailsUrl ?? failed?.targetUrl ?? null;
-}
-
 const CI_ICONS = {
   SUCCESS: { cls: 'success', char: '✓', label: 'checks passing' },
   FAILURE: { cls: 'failure', char: '✕', label: 'checks failing' },
@@ -653,7 +680,7 @@ function renderPr(pr, { badge } = {}) {
 
   const meta = document.createElement('span');
   meta.className = 'pr-meta';
-  const comments = pr.comments.totalCount ? ` · 💬 ${pr.comments.totalCount}` : '';
+  const comments = pr.comments?.totalCount ? ` · 💬 ${pr.comments.totalCount}` : '';
   meta.innerHTML = `<a href="${new URL(pr.url).origin}/${pr.repository.nameWithOwner}">${pr.repository.nameWithOwner}</a>`
     + ` #${pr.number} · updated ${relativeTime(pr.updatedAt)}${comments}`;
 
@@ -665,15 +692,14 @@ function renderPr(pr, { badge } = {}) {
   const stack = renderReviewers(reviewers(pr));
   if (stack) side.append(stack);
 
-  const rollup = pr.commits.nodes[0]?.commit.statusCheckRollup;
-  if (rollup && CI_ICONS[rollup.state]) {
-    const { cls, char, label } = CI_ICONS[rollup.state];
+  if (pr.ci && CI_ICONS[pr.ci.state]) {
+    const { cls, char, label } = CI_ICONS[pr.ci.state];
     const ci = document.createElement('a');
     ci.className = `ci ${cls}`;
     ci.textContent = char;
     ci.title = label;
     ci.setAttribute('aria-label', label);
-    ci.href = firstFailedCheckUrl(rollup) ?? `${pr.url}/checks`;
+    ci.href = pr.ci.url;
     side.append(ci);
   }
 
@@ -926,8 +952,12 @@ async function refresh() {
     if (rejected.size) {
       problems.unshift(`${rejected.size} token${rejected.size === 1 ? '' : 's'} rejected and removed`);
     }
-    status.textContent = [...problems, ...warnings].join('; ');
-    status.classList.toggle('error', problems.length > 0);
+    // Partial-data warnings: keep them to a tooltip rather than a wall of text.
+    const hosts = [...new Set([...warnings].map((w) => w.split(': ')[0]))];
+    if (hosts.length) problems.push(`some fields hidden from the ${hosts.join(', ')} token (see console)`);
+    status.textContent = problems.join('; ');
+    status.title = [...warnings].join('\n');
+    status.classList.toggle('error', failures.size > 0 || rejected.size > 0);
   } catch (err) {
     status.textContent = `Failed to load: ${err.message}`;
     status.classList.add('error');
@@ -939,7 +969,7 @@ async function refresh() {
 
 $('#token-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const entry = { host: normalizeHost($('#host-input').value), token: $('#token-input').value.trim() };
+  const entry = { host: normalizeHost($('#host-input').value), token: $('#token-input').value.replace(/\s+/g, '') };
   if (!entry.token || tokens.some((t) => sameEntry(t, entry))) {
     $('#token-input').value = '';
     return;

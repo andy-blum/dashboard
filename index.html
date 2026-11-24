@@ -36,7 +36,7 @@
   }
 
   .wrap {
-    max-width: 60rem;
+    max-width: 72rem;
     margin-inline: auto;
     padding: 1.5rem 1rem 4rem;
   }
@@ -188,54 +188,164 @@
     color: var(--text);
   }
 
-  ul.pr-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .table-wrap {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
+    overflow-x: auto;
+  }
+  table.pr-table {
+    width: 100%;
+    min-width: 48rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.85rem;
+  }
+  .pr-table th, .pr-table td {
+    padding: 0.4rem 0.6rem;
+    text-align: start;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
-  ul.pr-list:empty { display: none; }
-  ul.pr-list li {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 0.25rem 0.75rem;
-    align-items: start;
-    padding: 0.6rem 1rem;
-  }
-  ul.pr-list li + li { border-block-start: 1px solid var(--border); }
-  ul.pr-list li.hidden { display: none; }
-
-  .pr-icon { padding-block-start: 0.15rem; }
-  .pr-icon svg { fill: var(--green); }
-  li.is-draft .pr-icon svg { fill: var(--text-muted); }
-  /* Draft grey wins: a draft isn't waiting on anyone, conflicts or not. */
-  li:not(.is-draft) .pr-icon.conflict svg { fill: var(--red); }
-  li:not(.is-draft) .pr-icon.behind svg { fill: var(--yellow); }
-
-  .pr-main { min-width: 0; }
-  .pr-title {
-    font-weight: 600;
-    color: var(--text);
-    text-decoration: none;
-    overflow-wrap: anywhere;
-  }
-  .pr-title:hover { color: var(--accent); text-decoration: underline; }
-  .pr-meta {
+  .pr-table thead th {
+    border-block-end: 1px solid var(--border);
     color: var(--text-muted);
     font-size: 0.75rem;
+    font-weight: 600;
   }
-  .pr-meta a { color: inherit; text-decoration: none; }
-  .pr-meta a:hover { color: var(--accent); }
+  .pr-table th button {
+    all: unset;
+    cursor: pointer;
+  }
+  .pr-table th button:hover { color: var(--text); }
+  .pr-table th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pr-table th[aria-sort] { color: var(--text); }
+  .pr-table th[aria-sort] button::after { content: ' \25B2'; font-size: 0.6rem; }
+  .pr-table th[aria-sort="descending"] button::after { content: ' \25BC'; }
+  .pr-table tbody tr:not(.hidden) ~ tr td { border-block-start: 1px solid var(--border); }
+  .pr-table tbody tr:hover { background: var(--badge-gray-bg); }
+  .pr-table tr.hidden { display: none; }
+  .pr-table a { color: inherit; text-decoration: none; }
+  .pr-table a:hover { color: var(--accent); text-decoration: underline; }
 
-  .pr-side {
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  #toggle-ignored, .ignore-btn {
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .pr-table td:has(> .ignore-btn) { padding-inline: 0; text-align: center; }
+  .ignore-btn { padding: 0 0.4rem; font-size: 0.9rem; line-height: 1.3rem; }
+  #toggle-ignored:hover, .ignore-btn:hover { color: var(--text); border-color: var(--text-muted); }
+  #toggle-ignored[aria-pressed="true"] { color: var(--text); background: var(--badge-gray-bg); }
+  /* The ignore button only shows on the row you're pointing at, to keep the
+     table quiet. Touch screens can't hover, so they always see it. */
+  @media (hover: hover) {
+    .ignore-btn { opacity: 0; }
+    tr:hover .ignore-btn, .ignore-btn:focus-visible { opacity: 1; }
+  }
+  .pr-table tr.ignored td { opacity: 0.5; }
+  .pr-table tr.ignored:hover td { opacity: 0.8; }
+
+  /* A long repo name gives way before the PR number and CI icon do. */
+  .pr-ref {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .pr-ref .pr-repo {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pr-ref .pr-number, .pr-ref .ci { flex: none; }
+  .pr-ref .ci { margin-inline-start: 0.1rem; }
+
+  .pr-size { font-variant-numeric: tabular-nums; cursor: default; }
+  .pr-size .add { color: var(--green); }
+  .pr-size .del { color: var(--red); }
+
+  .pr-author img {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    vertical-align: -0.2rem;
+    margin-inline-end: 0.35rem;
+  }
+
+  .pr-table .pr-repo, .pr-table .pr-number, .pr-updated { color: var(--text-muted); }
+
+  .pr-icon svg {
+    fill: var(--green);
+    vertical-align: -0.2rem;
+    margin-inline-end: 0.4rem;
+  }
+  tr.is-draft .pr-icon svg { fill: var(--text-muted); }
+  /* Draft grey wins: a draft isn't waiting on anyone, conflicts or not. */
+  tr:not(.is-draft) .pr-icon.conflict svg { fill: var(--red); }
+  tr:not(.is-draft) .pr-icon.behind svg { fill: var(--yellow); }
+
+  .pr-title { font-weight: 600; }
+
+  /* Title and labels share one line. The title gives way first, and labels
+     take at most half the cell. Labels that don't fit wrap onto a clipped
+     second line, and fitLabels() swaps them for a "+N" chip. */
+  .title-line {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding-block-start: 0.15rem;
+    min-width: 0;
   }
+  .title-line .pr-icon { flex: none; }
+  .title-line .pr-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .labels {
+    display: flex;
+    /* No shrinking: even a sliver would push the "+N" chip off the line.
+       max-width caps it instead. */
+    flex: none;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    max-width: 50%;
+    height: 1.2rem;
+    /* Never narrower than one pill, so a lone "+N" chip isn't clipped. */
+    min-width: min-content;
+    margin-inline-start: 0.5rem;
+    overflow: hidden;
+  }
+  .label {
+    flex: none;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.2rem;
+  }
+  .label[hidden] { display: none; }
+  .label.more {
+    background: var(--badge-gray-bg);
+    color: var(--text-muted);
+    cursor: default;
+  }
+  .pr-table a.pr-title { color: var(--text); }
+  .pr-table a.pr-title:hover { color: var(--accent); }
 
   .badge {
     display: inline-block;
@@ -251,59 +361,13 @@
   .badge.awaiting      { color: var(--yellow); background: var(--badge-yellow-bg); }
   .badge.draft         { color: var(--text-muted); background: var(--badge-gray-bg); }
 
-  /* Reviewer avatars */
-  .reviewers {
-    display: flex;
-    align-items: center;
-    padding-inline-end: 0.15rem;
-  }
-  .reviewers > * + * { margin-inline-start: -0.4rem; }
-  .reviewers > * { position: relative; }
-
-  .avatar {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.4rem;
-    height: 1.4rem;
-    border-radius: 999px;
-    background: var(--badge-gray-bg);
-    box-shadow: 0 0 0 1.5px var(--ring, var(--border)), 0 0 0 3px var(--surface);
-    color: var(--text-muted);
-    font-size: 0.6rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .avatar img {
-    width: 100%;
-    height: 100%;
-    border-radius: 999px;
-    display: block;
-  }
-  .avatar.approved  { --ring: var(--green); }
-  .avatar.changes   { --ring: var(--red); }
-  .avatar.commented { --ring: var(--accent); }
-  .avatar.pending   { --ring: var(--border); opacity: 0.6; }
-  .avatar.is-team, .avatar.is-team img { border-radius: var(--radius); }
-
-  /* Corner glyph so approved/changes don't read by color alone. */
-  .avatar .glyph {
-    position: absolute;
-    inset-block-end: -0.15rem;
-    inset-inline-end: -0.2rem;
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.5rem;
-    line-height: 1;
-    color: #fff;
-    background: var(--ring);
-    box-shadow: 0 0 0 1.5px var(--surface);
-  }
+  /* Review counts per state; names are in each count's tooltip. */
+  .review-counts { display: inline-flex; gap: 0.5rem; }
+  .rv { font-variant-numeric: tabular-nums; cursor: default; }
+  .rv.approved  { color: var(--green); }
+  .rv.changes   { color: var(--red); }
+  .rv.commented { color: var(--accent); }
+  .rv.pending   { color: var(--text-muted); }
 
   .ci {
     font-size: 0.9rem;
@@ -377,8 +441,9 @@
     <section aria-labelledby="reviewing-h">
       <div class="section-head">
         <h2 id="reviewing-h">Review requested <span class="count" id="reviewing-count">0</span></h2>
+        <button id="toggle-ignored" type="button" aria-pressed="false" hidden></button>
       </div>
-      <ul class="pr-list" id="reviewing-list"></ul>
+      <div class="table-wrap" id="reviewing-wrap"><table class="pr-table"><tbody id="reviewing-list"></tbody></table></div>
       <p class="empty" id="reviewing-empty" hidden>No PRs waiting on your review. 🎉</p>
     </section>
 
@@ -386,7 +451,7 @@
       <div class="section-head">
         <h2 id="authored-h">Authored <span class="count" id="authored-count">0</span></h2>
       </div>
-      <ul class="pr-list" id="authored-list"></ul>
+      <div class="table-wrap" id="authored-wrap"><table class="pr-table"><tbody id="authored-list"></tbody></table></div>
       <p class="empty" id="authored-empty" hidden>No open PRs authored by you.</p>
     </section>
   </main>
@@ -401,23 +466,26 @@ const $ = (sel) => document.querySelector(sel);
 const PR_FRAGMENT = `
   fragment prFields on PullRequest {
     number title url isDraft updatedAt headRefOid
+    author { login avatarUrl(size: 32) }
+    additions deletions changedFiles
     repository { nameWithOwner owner { login } }
     reviewDecision
     mergeable mergeStateStatus baseRefName
     reviewRequests(first: 20) {
       nodes { requestedReviewer {
-        ... on User { login avatarUrl(size: 48) }
-        ... on Team { slug avatarUrl(size: 48) }
+        ... on User { login }
+        ... on Team { slug }
       } }
     }
     latestReviews(first: 20) {
-      nodes { state author { login avatarUrl(size: 48) } }
+      nodes { state author { login } }
     }
     latestOpinionatedReviews(first: 20) {
       nodes { state author { login } }
     }
     commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
     comments { totalCount }
+    labels(first: 10) { nodes { name color description } }
   }`;
 
 // The two searches run as separate parallel requests: each is ~2.5s
@@ -560,7 +628,6 @@ function reviewers(pr) {
     if (!name || !REVIEWED[r.state]) continue;
     byName.set(name, {
       name,
-      avatarUrl: r.author.avatarUrl,
       href: `${origin}/${name}`,
       ...REVIEWED[r.state],
     });
@@ -573,7 +640,6 @@ function reviewers(pr) {
     const team = !who.login;
     byName.set(name, {
       name: team ? `${org}/${name}` : name,
-      avatarUrl: who.avatarUrl,
       href: team ? `${origin}/orgs/${org}/teams/${name}` : `${origin}/${name}`,
       team,
       ...PENDING_REVIEW,
@@ -584,52 +650,26 @@ function reviewers(pr) {
     .sort((a, b) => REVIEW_ORDER.indexOf(a.key) - REVIEW_ORDER.indexOf(b.key));
 }
 
-const MAX_AVATARS = 4;
+const REVIEW_GLYPHS = { approved: '\u2713', changes: '\u2715', commented: '\u25CF', pending: '\u25CB' };
 
-function renderReviewers(list) {
-  if (!list.length) return null;
-
+// "✓2 ○3": one count per review state, with the names behind it in a tooltip.
+function renderReviewCounts(list) {
   const wrap = document.createElement('span');
-  wrap.className = 'reviewers';
-  const counts = new Map();
-  for (const r of list) counts.set(r.label, (counts.get(r.label) ?? 0) + 1);
-  wrap.setAttribute('aria-label',
-    'Reviews: ' + [...counts].map(([label, n]) => `${n} ${label}`).join(', '));
-
-  const shown = list.slice(0, MAX_AVATARS);
-  shown.forEach((r, i) => {
-    const a = document.createElement('a');
-    a.className = `avatar ${r.key}${r.team ? ' is-team' : ''}`;
-    // Earlier avatars paint on top so their status glyph isn't covered.
-    a.style.zIndex = shown.length - i;
-    a.href = r.href;
-    a.title = `${r.name} — ${r.label}`;
-    if (r.avatarUrl) {
-      const img = document.createElement('img');
-      img.src = r.avatarUrl;
-      img.alt = '';
-      img.loading = 'lazy';
-      a.append(img);
-    } else {
-      a.textContent = r.name.slice(0, 2).toUpperCase();
-    }
-    if (r.glyph) {
-      const g = document.createElement('span');
-      g.className = 'glyph';
-      g.textContent = r.glyph;
-      a.append(g);
-    }
-    wrap.append(a);
-  });
-
-  if (list.length > MAX_AVATARS) {
-    const more = document.createElement('span');
-    more.className = 'avatar';
-    more.textContent = `+${list.length - MAX_AVATARS}`;
-    more.title = list.slice(MAX_AVATARS).map((r) => `${r.name} — ${r.label}`).join('\n');
-    wrap.append(more);
+  wrap.className = 'review-counts';
+  const parts = [];
+  for (const key of REVIEW_ORDER) {
+    const group = list.filter((r) => r.key === key);
+    if (!group.length) continue;
+    const { label } = group[0];
+    const span = document.createElement('span');
+    span.className = `rv ${key}`;
+    span.textContent = `${REVIEW_GLYPHS[key]}${group.length}`;
+    span.title = `${label}: ${group.map((r) => r.name).join(', ')}`;
+    span.setAttribute('aria-hidden', 'true');
+    wrap.append(span);
+    parts.push(`${group.length} ${label}`);
   }
-
+  if (parts.length) wrap.setAttribute('aria-label', `Reviews: ${parts.join(', ')}`);
   return wrap;
 }
 
@@ -641,84 +681,174 @@ const CI_ICONS = {
   EXPECTED:{ cls: 'pending', char: '●', label: 'checks expected' },
 };
 
-function relativeTime(iso) {
+// Compact age for the Updated column: "now", "4m", "3h", "2d", "5mo", "1y".
+function shortAge(iso) {
   const s = (Date.now() - new Date(iso)) / 1000;
-  const units = [[31536000, 'year'], [2592000, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']];
+  const units = [[31536000, 'y'], [2592000, 'mo'], [86400, 'd'], [3600, 'h'], [60, 'm']];
   for (const [secs, name] of units) {
-    if (s >= secs) {
-      const n = Math.floor(s / secs);
-      return `${n} ${name}${n > 1 ? 's' : ''} ago`;
-    }
+    if (s >= secs) return `${Math.floor(s / secs)}${name}`;
   }
-  return 'just now';
+  return 'now';
 }
 
-function renderPr(pr, { badge } = {}) {
-  const li = document.createElement('li');
-  li.dataset.org = orgKey(pr);
-  if (pr.isDraft) li.classList.add('is-draft');
+const PR_ICON = '<svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"></path></svg>';
+
+function link(href, text, className, title) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.textContent = text;
+  if (className) a.className = className;
+  if (title) a.title = title;
+  return a;
+}
+
+// Labels in their GitHub colour, with black or white text, whichever reads
+// better on it.
+function renderLabels(labels) {
+  if (!labels.length) return null;
+  const wrap = document.createElement('span');
+  wrap.className = 'labels';
+  // Some may be clipped, so the whole set is in the tooltip.
+  wrap.title = labels.map((l) => l.name).join(', ');
+  for (const { name, color, description } of labels) {
+    const span = document.createElement('span');
+    span.className = 'label';
+    span.textContent = name;
+    span.title = description ? `${name}: ${description}` : name;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(color.slice(i, i + 2), 16));
+    span.style.background = `#${color}`;
+    span.style.color = (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1f2328' : '#fff';
+    wrap.append(span);
+  }
+  return wrap;
+}
+
+// 1234 → "1.2k", so big PRs don't widen the column.
+function compactCount(n) {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+}
+
+function renderSize(pr) {
+  const span = document.createElement('span');
+  span.className = 'pr-size';
+  // Cached data from before sizes were fetched has none; the next refresh fills it in.
+  if (pr.additions == null) return span;
+  const add = document.createElement('span');
+  add.className = 'add';
+  add.textContent = `+${compactCount(pr.additions)}`;
+  const del = document.createElement('span');
+  del.className = 'del';
+  del.textContent = `\u2212${compactCount(pr.deletions)}`;
+  span.append(add, ' ', del);
+  const files = pr.changedFiles === 1 ? '1 file' : `${pr.changedFiles} files`;
+  span.title = `${pr.additions} additions, ${pr.deletions} deletions in ${files}`;
+  return span;
+}
+
+function renderAuthor(pr) {
+  // A deleted account comes back as a null author; GitHub shows it as ghost.
+  const login = pr.author?.login ?? 'ghost';
+  const a = link(`${new URL(pr.url).origin}/${login}`, '', 'pr-author', login);
+  if (pr.author?.avatarUrl) {
+    const img = document.createElement('img');
+    img.src = pr.author.avatarUrl;
+    img.alt = '';
+    img.loading = 'lazy';
+    a.append(img);
+  }
+  a.append(login);
+  return a;
+}
+
+function renderRow({ pr, badge }, name) {
+  const tr = document.createElement('tr');
+  tr.dataset.org = orgKey(pr);
+  if (pr.isDraft) tr.classList.add('is-draft');
+  const cell = (...children) => {
+    const td = document.createElement('td');
+    td.append(...children);
+    tr.append(td);
+    return td;
+  };
+
+  const repo = pr.repository.nameWithOwner;
+  const ref = document.createElement('div');
+  ref.className = 'pr-ref';
+  ref.append(
+    link(`${new URL(pr.url).origin}/${repo}`, repo.split('/')[1], 'pr-repo', repo),
+    link(pr.url, `#${pr.number}`, 'pr-number'),
+  );
+  if (pr.ci && CI_ICONS[pr.ci.state]) {
+    const { cls, char, label } = CI_ICONS[pr.ci.state];
+    const ci = link(pr.ci.url, char, `ci ${cls}`, label);
+    ci.setAttribute('aria-label', label);
+    ref.append(ci);
+  }
+  cell(ref);
 
   const icon = document.createElement('span');
   icon.className = 'pr-icon';
   // Merge state rides on the icon colour, so name it for anyone not seeing that.
+  // Draft wins, matching the grey icon (Review requested has no Status column).
   const merge = mergeWarning(pr);
-  if (merge) {
-    icon.classList.add(merge.key);
-    icon.title = merge.title;
+  if (merge) icon.classList.add(merge.key);
+  const iconLabel = pr.isDraft ? 'Draft' : merge?.title;
+  if (iconLabel) {
+    icon.title = iconLabel;
     icon.setAttribute('role', 'img');
-    icon.setAttribute('aria-label', merge.title);
+    icon.setAttribute('aria-label', iconLabel);
   }
-  icon.innerHTML = '<svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"></path></svg>';
+  icon.innerHTML = PR_ICON;
+  const n = pr.comments?.totalCount ?? 0;
+  const comments = n ? `\n${n} comment${n === 1 ? '' : 's'}` : '';
+  const line = document.createElement('div');
+  line.className = 'title-line';
+  line.append(icon, link(pr.url, pr.title, 'pr-title', pr.title + comments));
+  const labels = renderLabels(pr.labels?.nodes ?? []);
+  if (labels) line.append(labels);
+  cell(line);
 
-  const main = document.createElement('span');
-  main.className = 'pr-main';
+  cell(renderSize(pr));
 
-  const title = document.createElement('a');
-  title.className = 'pr-title';
-  title.href = pr.url;
-  title.textContent = pr.title;
+  cell(renderReviewCounts(reviewers(pr)));
 
-  const meta = document.createElement('span');
-  meta.className = 'pr-meta';
-  const comments = pr.comments?.totalCount ? ` · 💬 ${pr.comments.totalCount}` : '';
-  meta.innerHTML = `<a href="${new URL(pr.url).origin}/${pr.repository.nameWithOwner}">${pr.repository.nameWithOwner}</a>`
-    + ` #${pr.number} · updated ${relativeTime(pr.updatedAt)}${comments}`;
-
-  main.append(title, document.createElement('br'), meta);
-
-  const side = document.createElement('span');
-  side.className = 'pr-side';
-
-  const stack = renderReviewers(reviewers(pr));
-  if (stack) side.append(stack);
-
-  if (pr.ci && CI_ICONS[pr.ci.state]) {
-    const { cls, char, label } = CI_ICONS[pr.ci.state];
-    const ci = document.createElement('a');
-    ci.className = `ci ${cls}`;
-    ci.textContent = char;
-    ci.title = label;
-    ci.setAttribute('aria-label', label);
-    ci.href = pr.ci.url;
-    side.append(ci);
+  // You wrote everything in Authored, so that table shows review status here
+  // and Review requested shows who's asking instead.
+  if (name === 'authored') {
+    const statusCell = cell();
+    if (badge) {
+      const b = document.createElement('span');
+      b.className = `badge ${badge.key}`;
+      b.textContent = badge.label;
+      statusCell.append(b);
+    }
+  } else {
+    cell(renderAuthor(pr));
   }
 
-  if (badge) {
-    const b = document.createElement('span');
-    b.className = `badge ${badge.key}`;
-    b.textContent = badge.label;
-    side.append(b);
+  const updated = document.createElement('time');
+  updated.className = 'pr-updated';
+  updated.dateTime = pr.updatedAt;
+  updated.title = new Date(pr.updatedAt).toLocaleString();
+  updated.textContent = shortAge(pr.updatedAt);
+  cell(updated);
+
+  if (name === 'reviewing') {
+    tr.dataset.url = pr.url;
+    const isIgnored = ignored.has(pr.url);
+    tr.classList.toggle('ignored', isIgnored);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ignore-btn';
+    // × hides, ↺ brings it back. The tooltip and label say which.
+    button.textContent = isIgnored ? '\u21BA' : '\u00D7';
+    button.title = isIgnored ? 'Restore: show this PR in the list again' : 'Ignore: hide this PR from the list';
+    button.setAttribute('aria-label', `${isIgnored ? 'Restore' : 'Ignore'} #${pr.number} ${pr.title}`);
+    button.addEventListener('click', () => toggleIgnore(pr.url));
+    cell(button);
   }
 
-  li.append(icon, main, side);
-  return li;
-}
-
-function renderReviewing(prs) {
-  const list = $('#reviewing-list');
-  list.replaceChildren(...prs.map((pr) =>
-    renderPr(pr, { badge: pr.isDraft ? { key: 'draft', label: 'Draft' } : null })
-  ));
+  return tr;
 }
 
 // Org requested via ?org=; held until a render includes it in the options.
@@ -751,41 +881,218 @@ function syncOrgToUrl(org) {
   history.replaceState(null, '', url);
 }
 
+// Hides rows outside the chosen org, and ignored review requests unless
+// they've been asked for. Counts leave ignored PRs out.
 function applyOrgFilter() {
   const org = $('#org-filter').value;
   for (const name of ['reviewing', 'authored']) {
-    const items = $(`#${name}-list`).querySelectorAll('li');
+    const items = $(`#${name}-list`).querySelectorAll('tr');
     let visible = 0;
-    for (const li of items) {
-      const show = !org || li.dataset.org === org;
-      li.classList.toggle('hidden', !show);
+    let active = 0;
+    let activeTotal = 0;
+    let ignoredHere = 0;
+    for (const tr of items) {
+      const inOrg = !org || tr.dataset.org === org;
+      const isIgnored = tr.classList.contains('ignored');
+      if (!isIgnored) activeTotal++;
+      if (inOrg && isIgnored) ignoredHere++;
+      if (inOrg && !isIgnored) active++;
+      const show = inOrg && (!isIgnored || showIgnored);
+      tr.classList.toggle('hidden', !show);
       if (show) visible++;
     }
-    $(`#${name}-count`).textContent = org ? `${visible} / ${items.length}` : items.length;
+    $(`#${name}-count`).textContent = org ? `${active} / ${activeTotal}` : activeTotal;
+    if (name === 'reviewing') {
+      const toggle = $('#toggle-ignored');
+      toggle.hidden = ignoredHere === 0;
+      toggle.textContent = `${showIgnored ? 'Hide' : 'Show'} ${ignoredHere} ignored`;
+      toggle.setAttribute('aria-pressed', String(showIgnored));
+    }
     $(`#${name}-empty`).hidden = visible > 0;
+    $(`#${name}-wrap`).hidden = visible === 0;
+  }
+  fitAllLabels();
+}
+
+// Labels that don't fit on the title line are hidden and counted in a "+N"
+// chip. Only rows on screen have a layout to measure, so this reruns after
+// every filter change and on resize.
+function fitLabels(wrap) {
+  wrap.querySelector('.more')?.remove();
+  const pills = [...wrap.children];
+  for (const pill of pills) pill.hidden = false;
+  const top = pills[0].offsetTop;
+  const wrapped = (el) => el.offsetTop > top;
+  if (!pills.some(wrapped)) return;
+
+  for (const pill of pills) if (wrapped(pill)) pill.hidden = true;
+  const more = document.createElement('span');
+  more.className = 'label more';
+  wrap.append(more);
+  // The chip needs room too: give up labels from the end until it fits.
+  let shown = pills.filter((p) => !p.hidden);
+  do {
+    const hidden = pills.filter((p) => p.hidden);
+    more.textContent = `+${hidden.length}`;
+    more.title = hidden.map((p) => p.textContent).join(', ');
+    if (!wrapped(more) || shown.length === 0) break;
+    shown.pop().hidden = true;
+  } while (true);
+}
+
+function fitAllLabels() {
+  for (const wrap of document.querySelectorAll('#dashboard tr:not(.hidden) .labels')) fitLabels(wrap);
+}
+
+let resizeFrame = 0;
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(fitAllLabels);
+});
+
+// Status sorts most-actionable first. A branch the author has to fix by hand
+// outranks review state: conflicts → out of date → clean, then changes
+// requested → awaiting → re-review pending → approved. Drafts stay last however
+// broken they are.
+const REVIEW_RANK = { changes: 0, awaiting: 1, 're-review': 2, approved: 3 };
+const MERGE_RANK = { conflict: 0, behind: 1 };
+
+function statusRank({ pr, badge }) {
+  if (pr.isDraft) return 99;
+  return (MERGE_RANK[mergeWarning(pr)?.key] ?? 2) * 10 + (REVIEW_RANK[badge?.key] ?? 0);
+}
+
+// Changes requested first, then fewest approvals.
+function reviewRank({ pr }) {
+  const list = reviewers(pr);
+  const count = (key) => list.filter((r) => r.key === key).length;
+  return count('approved') - 100 * count('changes');
+}
+
+const COLUMNS = [
+  // Sorts by repo; the PR number tie-break in sortRows orders within it.
+  { key: 'repo', label: 'PR', width: '12rem', value: (r) => r.pr.repository.nameWithOwner.toLowerCase() },
+  { key: 'title', label: 'Title', value: (r) => r.pr.title.toLowerCase() },
+  { key: 'size', label: 'Size', width: '6.5rem', value: (r) => (r.pr.additions ?? 0) + (r.pr.deletions ?? 0), firstDir: 'desc' },
+  { key: 'reviews', label: 'Reviews', width: '8rem', value: reviewRank },
+  { key: 'status', label: 'Status', width: '9.5rem', value: statusRank, only: 'authored' },
+  { key: 'author', label: 'Author', width: '9.5rem', value: (r) => (r.pr.author?.login ?? 'ghost').toLowerCase(), only: 'reviewing' },
+  { key: 'updated', label: 'Updated', width: '5.5rem', value: (r) => r.pr.updatedAt, firstDir: 'desc' },
+];
+
+const columnsFor = (name) => COLUMNS.filter((c) => !c.only || c.only === name);
+
+const SORT_KEY = 'pr-dashboard-sort';
+const DEFAULT_SORT = { key: 'repo', dir: 'asc' };
+
+function readSort() {
+  try {
+    return JSON.parse(localStorage.getItem(SORT_KEY)) ?? {};
+  } catch {
+    return {};
   }
 }
 
-// Most-actionable first. A branch the author has to fix by hand outranks review
-// state: conflicts → out of date → clean, then changes requested → awaiting →
-// re-review pending → approved. Drafts stay last however broken they are.
-const REVIEW_RANK = { changes: 0, awaiting: 1, 're-review': 2, approved: 3, draft: 4 };
-const MERGE_RANK = { conflict: 0, behind: 1 };
+const sorts = readSort();
 
-function actionRank({ pr, badge }) {
-  if (badge.key === 'draft') return [2, REVIEW_RANK.draft];
-  return [MERGE_RANK[mergeWarning(pr)?.key] ?? 2, REVIEW_RANK[badge.key]];
+// Review requests the user has chosen to hide, by PR URL. Some repos add
+// everyone as a reviewer, so not every request needs attention.
+const IGNORED_KEY = 'pr-dashboard-ignored';
+const ignored = new Set((() => {
+  try {
+    return JSON.parse(localStorage.getItem(IGNORED_KEY)) ?? [];
+  } catch {
+    return [];
+  }
+})());
+let showIgnored = false;
+
+function saveIgnored() {
+  try {
+    localStorage.setItem(IGNORED_KEY, JSON.stringify([...ignored]));
+  } catch {}
 }
 
-function renderAuthored(prs) {
-  const list = $('#authored-list');
-  const classified = prs.map((pr) => ({ pr, badge: classify(pr) }));
-  classified.sort((a, b) => {
-    const [am, ar] = actionRank(a);
-    const [bm, br] = actionRank(b);
-    return am - bm || ar - br;
-  });
-  list.replaceChildren(...classified.map(({ pr, badge }) => renderPr(pr, { badge })));
+function toggleIgnore(url) {
+  if (ignored.has(url)) ignored.delete(url);
+  else ignored.add(url);
+  saveIgnored();
+  renderTable('reviewing');
+  applyOrgFilter();
+  // Re-rendering drops focus. Put it back on the row if it's still showing.
+  const row = $(`#reviewing-list tr[data-url="${CSS.escape(url)}"]:not(.hidden)`);
+  row?.querySelector('.ignore-btn').focus();
+}
+
+const compare = (a, b) => (typeof a === 'string' ? a.localeCompare(b) : a - b);
+
+// Ties always fall back to repo then PR number, so rows only move when the
+// sorted value itself changes, never because something was updated.
+function sortRows(name, rows) {
+  const { key, dir } = sorts[name] ?? DEFAULT_SORT;
+  const col = columnsFor(name).find((c) => c.key === key) ?? COLUMNS[0];
+  const sign = dir === 'desc' ? -1 : 1;
+  return rows.sort((a, b) => sign * compare(col.value(a), col.value(b))
+    || compare(COLUMNS[0].value(a), COLUMNS[0].value(b))
+    || a.pr.number - b.pr.number);
+}
+
+function setSort(name, col) {
+  const current = sorts[name] ?? DEFAULT_SORT;
+  sorts[name] = current.key === col.key
+    ? { key: col.key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+    : { key: col.key, dir: col.firstDir ?? 'asc' };
+  try {
+    localStorage.setItem(SORT_KEY, JSON.stringify(sorts));
+  } catch {}
+  renderTable(name);
+  applyOrgFilter();
+}
+
+function buildHeader(name) {
+  const colgroup = document.createElement('colgroup');
+  const tr = document.createElement('tr');
+  for (const col of columnsFor(name)) {
+    const c = document.createElement('col');
+    if (col.width) c.style.width = col.width;
+    colgroup.append(c);
+
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.dataset.key = col.key;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = col.label;
+    button.addEventListener('click', () => setSort(name, col));
+    th.append(button);
+    tr.append(th);
+  }
+  if (name === 'reviewing') {
+    const c = document.createElement('col');
+    c.style.width = '2.5rem';
+    colgroup.append(c);
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.innerHTML = '<span class="visually-hidden">Ignore</span>';
+    tr.append(th);
+  }
+  const thead = document.createElement('thead');
+  thead.append(tr);
+  $(`#${name}-list`).closest('table').prepend(colgroup, thead);
+}
+
+function renderTable(name) {
+  const rows = lists[name].map((pr) => ({
+    pr,
+    badge: name === 'authored' ? classify(pr) : null,
+  }));
+  $(`#${name}-list`).replaceChildren(...sortRows(name, rows).map((row) => renderRow(row, name)));
+
+  const { key, dir } = sorts[name] ?? DEFAULT_SORT;
+  for (const th of $(`#${name}-list`).closest('table').querySelectorAll('th')) {
+    if (th.dataset.key === key) th.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
+    else th.removeAttribute('aria-sort');
+  }
 }
 
 const lists = { reviewing: [], authored: [] };
@@ -800,7 +1107,7 @@ function showDashboard(viewerLogin) {
 
 function renderList(name, prs) {
   lists[name] = prs;
-  (name === 'reviewing' ? renderReviewing : renderAuthored)(prs);
+  renderTable(name);
   buildOrgFilter(lists.reviewing, lists.authored);
 }
 
@@ -920,10 +1227,9 @@ async function refresh() {
       settled.forEach((r, i) => r?.warnings.forEach((w) => warnings.add(`${tokens[i].host}: ${w}`)));
       const ok = settled.filter(Boolean);
       if (!ok.length) return;
-      // Orgs can overlap between tokens, and merging loses the per-search
-      // sort:updated-desc ordering that renderReviewing relies on.
+      // Orgs can overlap between tokens. Order is up to renderTable.
       const byUrl = new Map(ok.flatMap((r) => r.prs).map((pr) => [pr.url, pr]));
-      const prs = [...byUrl.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const prs = [...byUrl.values()];
       fresh[name] = prs;
       fresh.viewer = ok[0].viewer.login;
       showDashboard(fresh.viewer);
@@ -938,6 +1244,16 @@ async function refresh() {
     if (!tokens.length) {
       showTokenForm('Token was rejected — enter a new one.');
       return;
+    }
+
+    // Forget ignores for PRs no longer asking for review, so the list doesn't
+    // grow forever. Only when every token answered, or a PR could just be
+    // missing from this response.
+    if (fresh.reviewing && !failures.size && !rejected.size) {
+      const current = new Set(fresh.reviewing.map((pr) => pr.url));
+      const before = ignored.size;
+      for (const url of [...ignored]) if (!current.has(url)) ignored.delete(url);
+      if (ignored.size !== before) saveIgnored();
     }
 
     if (fresh.reviewing && fresh.authored) {
@@ -1010,6 +1326,11 @@ $('#signout').addEventListener('click', () => {
   location.reload();
 });
 
+$('#toggle-ignored').addEventListener('click', () => {
+  showIgnored = !showIgnored;
+  applyOrgFilter();
+});
+
 $('#org-filter').addEventListener('change', () => {
   pendingOrg = null;
   syncOrgToUrl($('#org-filter').value);
@@ -1017,6 +1338,8 @@ $('#org-filter').addEventListener('change', () => {
 });
 
 let started = false;
+buildHeader('reviewing');
+buildHeader('authored');
 renderTokenList();
 if (tokens.length) {
   started = true;
